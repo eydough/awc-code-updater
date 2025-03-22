@@ -115,7 +115,8 @@ export const updateChallenge = (
   let latestDate: string | null = null;
   const remainingAnime: string[] = [];
 
-  // Process all anime entries
+  // Process all anime entries - each entry is processed independently
+  // even if multiple entries reference the same anime ID
   for (const entry of animeEntries) {
     const animeId = entry.animeId;
     let entryCompleted = entry.completed;
@@ -166,31 +167,48 @@ export const updateChallenge = (
     }
 
     // Find the entry in the challenge text
+    // This is where the fix happens - ensure we're looking for the specific URL occurrence
+    // that corresponds to this entry, using the position information
     let entryLineIdx = null;
     let dateLineIdx = null;
 
+    // Find the exact line where this specific URL instance occurs
+    let foundUrlCount = 0;
+    let targetUrlOccurrence = 0;
+
+    // Determine which occurrence of this URL we're looking for
+    // by counting occurrences up to the entry's position
+    const urlsUpToPosition = challengeText
+      .substring(0, entry.position)
+      .match(new RegExp(entry.url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'));
+    targetUrlOccurrence = urlsUpToPosition ? urlsUpToPosition.length : 0;
+
+    // Find the specific occurrence of this URL in the lines
     for (let i = 0; i < lines.length; i++) {
       if (lines[i].includes(entry.url)) {
-        // Look backward for the entry line
-        for (let j = i - 1; j >= Math.max(0, i - 5); j--) {
-          // Support grid-based identifiers like "A1)", "B2)", etc.
-          // Also support standard numeric identifiers
-          const entryPattern = /^([A-Z]\d+[.)]\)?|[A-Z]\d[.)]|[\d]+[.)])/i;
-          if (lines[j].trim().match(entryPattern)) {
-            entryLineIdx = j;
-            break;
+        if (foundUrlCount === targetUrlOccurrence) {
+          // This is the specific URL occurrence we're looking for
+          // Now look backward for the entry line
+          for (let j = i - 1; j >= Math.max(0, i - 5); j--) {
+            // Support grid-based identifiers like "A1)", "B2)", etc.
+            // Also support standard numeric identifiers
+            const entryPattern = /^([A-Z]\d+[.)]\)?|[A-Z]\d[.)]|[\d]+[.)])/i;
+            if (lines[j].trim().match(entryPattern)) {
+              entryLineIdx = j;
+              break;
+            }
           }
-        }
 
-        // Look for date line in next 3 lines
-        for (let j = i + 1; j < Math.min(lines.length, i + 4); j++) {
-          if (lines[j].includes('Start:') && lines[j].includes('Finish:')) {
-            dateLineIdx = j;
-            break;
+          // Look for date line in next 3 lines
+          for (let j = i + 1; j < Math.min(lines.length, i + 4); j++) {
+            if (lines[j].includes('Start:') && lines[j].includes('Finish:')) {
+              dateLineIdx = j;
+              break;
+            }
           }
+          break;
         }
-
-        break;
+        foundUrlCount++;
       }
     }
 
