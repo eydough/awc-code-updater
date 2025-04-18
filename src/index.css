@@ -4,27 +4,6 @@
 
 @layer base {
   :root {
-    /* Light mode variables - not used by default */
-    --light-background: 0 0% 100%;
-    --light-foreground: 222.2 84% 4.9%;
-    --light-card: 0 0% 100%;
-    --light-card-foreground: 222.2 84% 4.9%;
-    --light-popover: 0 0% 100%;
-    --light-popover-foreground: 222.2 84% 4.9%;
-    --light-primary: 221.2 83.2% 53.3%;
-    --light-primary-foreground: 210 40% 98%;
-    --light-secondary: 210 40% 96.1%;
-    --light-secondary-foreground: 222.2 47.4% 11.2%;
-    --light-muted: 210 40% 96.1%;
-    --light-muted-foreground: 215.4 16.3% 46.9%;
-    --light-accent: 210 40% 96.1%;
-    --light-accent-foreground: 222.2 47.4% 11.2%;
-    --light-destructive: 0 84.2% 60.2%;
-    --light-destructive-foreground: 210 40% 98%;
-    --light-border: 214.3 31.8% 91.4%;
-    --light-input: 214.3 31.8% 91.4%;
-    --light-ring: 221.2 83.2% 53.3%;
-
     /* Dark mode AniList-inspired colors (default) */
     --background: 225 30% 11%;
     --foreground: 210 40% 98%;
@@ -48,29 +27,6 @@
     --radius: 0.5rem;
     --success: 160 84% 39%;
     --warning: 35 92% 50%;
-  }
-
-  /* We're not using this since dark mode is default, but keeping for reference */
-  .light {
-    --background: var(--light-background);
-    --foreground: var(--light-foreground);
-    --card: var(--light-card);
-    --card-foreground: var(--light-card-foreground);
-    --popover: var(--light-popover);
-    --popover-foreground: var(--light-popover-foreground);
-    --primary: var(--light-primary);
-    --primary-foreground: var(--light-primary-foreground);
-    --secondary: var(--light-secondary);
-    --secondary-foreground: var(--light-secondary-foreground);
-    --muted: var(--light-muted);
-    --muted-foreground: var(--light-muted-foreground);
-    --accent: var(--light-accent);
-    --accent-foreground: var(--light-accent-foreground);
-    --destructive: var(--light-destructive);
-    --destructive-foreground: var(--light-destructive-foreground);
-    --border: var(--light-border);
-    --input: var(--light-input);
-    --ring: var(--light-ring);
   }
 }
 

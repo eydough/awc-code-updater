@@ -1,23 +1,40 @@
-import { AnimeEntry, CompletedAnime, ChallengeStats } from '@/types';
+import { AnimeEntry, MediaEntry, CompletedAnime, CompletedMedia, ChallengeStats } from '@/types';
 
-// Parse challenge text to extract anime entries
-export const parseChallenge = (challengeText: string): AnimeEntry[] => {
-  const animeEntries: AnimeEntry[] = [];
+// Parse challenge text to extract media entries (anime and manga)
+export const parseChallenge = (challengeText: string): MediaEntry[] => {
+  const mediaEntries: MediaEntry[] = [];
   // Support multiple formats for URLs:
-  // 1. [Title](https://anilist.co/anime/12345/)
-  // 2. Direct URL: https://anilist.co/anime/12345/
+  // 1. [Title](https://anilist.co/anime/12345/) or [Title](https://anilist.co/manga/12345/)
+  // 2. Direct URL: https://anilist.co/anime/12345/ or https://anilist.co/manga/12345/
   // 3. Plain URLs on their own line
   // 4. URLs that might not end with a slash
-  const urlPattern = /https:\/\/anilist\.co\/anime\/(\d+)(?:[^\s)"']*)?/g;
+  const animeUrlPattern = /https:\/\/anilist\.co\/anime\/(\d+)(?:[^\s)"']*)?/g;
+  const mangaUrlPattern = /https:\/\/anilist\.co\/manga\/(\d+)(?:[^\s)"']*)?/g;
   const lines = challengeText.split('\n');
 
+  // Process both anime and manga URLs
+  processMediaUrls(challengeText, lines, animeUrlPattern, 'anime', mediaEntries);
+  processMediaUrls(challengeText, lines, mangaUrlPattern, 'manga', mediaEntries);
+
+  console.log(`Found ${mediaEntries.length} media entries in total`);
+  return mediaEntries;
+};
+
+// Helper function to process media URLs (anime or manga)
+const processMediaUrls = (
+  challengeText: string,
+  lines: string[],
+  urlPattern: RegExp,
+  mediaType: 'anime' | 'manga',
+  mediaEntries: MediaEntry[]
+) => {
   // Log all found URLs
   const allUrls = [];
   let urlMatch;
   while ((urlMatch = urlPattern.exec(challengeText)) !== null) {
     allUrls.push(urlMatch[0]);
   }
-  console.log(`Found ${allUrls.length} AniList URLs:`, allUrls);
+  console.log(`Found ${allUrls.length} AniList ${mediaType} URLs:`, allUrls);
 
   // Reset the lastIndex to start from the beginning again
   urlPattern.lastIndex = 0;
@@ -25,10 +42,10 @@ export const parseChallenge = (challengeText: string): AnimeEntry[] => {
   let match;
   while ((match = urlPattern.exec(challengeText)) !== null) {
     const url = match[0]; // The full matched URL
-    const animeId = match[1]; // Just the numeric ID
+    const mediaId = match[1]; // Just the numeric ID
     const position = match.index;
 
-    console.log(`Processing URL: ${url} (ID: ${animeId})`);
+    console.log(`Processing ${mediaType} URL: ${url} (ID: ${mediaId})`);
 
     // Find the entry number in previous lines
     let entryNum = null;
@@ -81,10 +98,11 @@ export const parseChallenge = (challengeText: string): AnimeEntry[] => {
       }
 
       if (entryNum) {
-        console.log(`Adding entry ${entryNum} with ID ${animeId} to anime entries`);
-        animeEntries.push({
+        console.log(`Adding ${mediaType} entry ${entryNum} with ID ${mediaId} to media entries`);
+        mediaEntries.push({
           entryNum,
-          animeId,
+          mediaId,
+          mediaType,
           url,
           position,
           completed: entryCompleted,
@@ -98,43 +116,60 @@ export const parseChallenge = (challengeText: string): AnimeEntry[] => {
       console.log(`Couldn't find the line containing URL: ${url}`);
     }
   }
+};
 
-  console.log(`Found ${animeEntries.length} anime entries in total`);
-  return animeEntries;
+// Legacy function for backward compatibility
+export const parseAnimeChallenge = (challengeText: string): AnimeEntry[] => {
+  const mediaEntries = parseChallenge(challengeText);
+  return mediaEntries
+    .filter(entry => entry.mediaType === 'anime')
+    .map(entry => ({
+      entryNum: entry.entryNum,
+      animeId: entry.mediaId,
+      url: entry.url,
+      position: entry.position,
+      completed: entry.completed,
+      startDate: entry.startDate,
+      finishDate: entry.finishDate,
+    }));
 };
 
 // Update challenge text with completion status and dates
 export const updateChallenge = (
   challengeText: string,
-  animeEntries: AnimeEntry[],
-  completedAnime: Record<string, CompletedAnime>
+  mediaEntries: MediaEntry[],
+  completedMedia: Record<string, CompletedMedia>
 ): { updatedText: string; stats: ChallengeStats } => {
   let updatedText = challengeText;
   const lines = updatedText.split('\n');
   let allCompleted = true;
   let latestDate: string | null = null;
-  const remainingAnime: string[] = [];
+  const remainingMedia: string[] = [];
 
-  // Process all anime entries - each entry is processed independently
-  // even if multiple entries reference the same anime ID
-  for (const entry of animeEntries) {
-    const animeId = entry.animeId;
+  // Process all media entries - each entry is processed independently
+  // even if multiple entries reference the same media ID
+  for (const entry of mediaEntries) {
+    const mediaId = entry.mediaId;
+    const mediaType = entry.mediaType;
     let entryCompleted = entry.completed;
     let entryStartDate = entry.startDate;
     let entryFinishDate = entry.finishDate;
 
-    // Check if this anime is in the user's completed list
-    if (completedAnime[animeId]) {
-      const animeData = completedAnime[animeId];
+    // Create a composite key for the media type and ID
+    const mediaKey = `${mediaType}-${mediaId}`;
+
+    // Check if this media is in the user's completed list
+    if (completedMedia[mediaKey]) {
+      const mediaData = completedMedia[mediaKey];
       entryCompleted = true;
 
       // Use dates from AniList if available
-      if (animeData.startDate) {
-        entryStartDate = animeData.startDate;
+      if (mediaData.startDate) {
+        entryStartDate = mediaData.startDate;
       }
 
-      if (animeData.finishDate) {
-        entryFinishDate = animeData.finishDate;
+      if (mediaData.finishDate) {
+        entryFinishDate = mediaData.finishDate;
 
         // Track latest finish date for overall challenge
         if (!latestDate || entryFinishDate > latestDate) {
@@ -147,7 +182,7 @@ export const updateChallenge = (
       if (!entryCompleted) {
         allCompleted = false;
 
-        // Try to find anime title in challenge text
+        // Try to find media title in challenge text
         for (let i = 0; i < lines.length; i++) {
           if (lines[i].includes(entry.url)) {
             const prevLine = lines[Math.max(0, i - 1)];
@@ -155,9 +190,9 @@ export const updateChallenge = (
               // eslint-disable-next-line no-misleading-character-class
               const titleMatch = prevLine.match(/[❌⚜️]\s+(.*)/);
               if (titleMatch) {
-                remainingAnime.push(titleMatch[1]);
+                remainingMedia.push(titleMatch[1]);
               } else {
-                remainingAnime.push(`Entry ${entry.entryNum}`);
+                remainingMedia.push(`Entry ${entry.entryNum}`);
               }
             }
             break;
@@ -264,11 +299,11 @@ export const updateChallenge = (
   }
 
   // Calculate stats
-  const completedCount = animeEntries.filter(
-    entry => entry.completed || !!entry.finishDate || !!completedAnime[entry.animeId]
+  const completedCount = mediaEntries.filter(
+    entry => entry.completed || !!entry.finishDate || !!completedMedia[`${entry.mediaType}-${entry.mediaId}`]
   ).length;
 
-  const totalCount = animeEntries.length;
+  const totalCount = mediaEntries.length;
   const completionPercentage = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
   const stats: ChallengeStats = {
@@ -276,8 +311,37 @@ export const updateChallenge = (
     totalCount,
     completionPercentage,
     finishDate: allCompleted ? latestDate : null,
-    remainingAnime,
+    remainingMedia,
   };
 
   return { updatedText, stats };
+};
+
+// Legacy function for backward compatibility
+export const updateAnimeChallenge = (
+  challengeText: string,
+  animeEntries: AnimeEntry[],
+  completedAnime: Record<string, CompletedAnime>
+): { updatedText: string; stats: ChallengeStats } => {
+  // Convert legacy types to new types
+  const mediaEntries: MediaEntry[] = animeEntries.map(entry => ({
+    entryNum: entry.entryNum,
+    mediaId: entry.animeId,
+    mediaType: 'anime' as const,
+    url: entry.url,
+    position: entry.position,
+    completed: entry.completed,
+    startDate: entry.startDate,
+    finishDate: entry.finishDate,
+  }));
+
+  const completedMedia: Record<string, CompletedMedia> = {};
+  for (const [animeId, anime] of Object.entries(completedAnime)) {
+    completedMedia[`anime-${animeId}`] = {
+      ...anime,
+      mediaType: 'anime',
+    };
+  }
+
+  return updateChallenge(challengeText, mediaEntries, completedMedia);
 };

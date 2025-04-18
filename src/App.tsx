@@ -1,10 +1,8 @@
 import { useEffect } from 'react';
-import ChallengeTracker from './lib/components/ChallengeTracker';
+import ChallengeTracker from './lib/components/challenge-tracker';
 
 function App() {
-  // Ensure dark mode is applied
   useEffect(() => {
-    // Set dark mode to default by adding the class to html element
     document.documentElement.classList.add('dark');
   }, []);
 
