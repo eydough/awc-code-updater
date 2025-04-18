@@ -4,17 +4,14 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Progress } from '@/components/ui/progress';
 import { fetchCompletedMedia } from '@/services/anilist-service';
 import { parseChallenge, updateChallenge } from '@/lib/utils/challenge-parser';
-import { ChallengeStats } from '@/types';
-import { CheckIcon, CopyIcon, LoaderIcon, TrophyIcon, ListTodoIcon } from 'lucide-react';
+import { CheckIcon, CopyIcon, LoaderIcon, TrophyIcon } from 'lucide-react';
 
 export default function ChallengeTracker() {
   const [username, setUsername] = useState('');
   const [challengeText, setChallengeText] = useState('');
   const [updatedText, setUpdatedText] = useState('');
-  const [stats, setStats] = useState<ChallengeStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -24,7 +21,6 @@ export default function ChallengeTracker() {
     // Reset states
     setError(null);
     setUpdatedText('');
-    setStats(null);
     setCopied(false);
 
     // Validate inputs
@@ -57,12 +53,11 @@ export default function ChallengeTracker() {
       // Fetch completed media from AniList
       const completedMedia = await fetchCompletedMedia(username);
 
-      // Update challenge text and get stats
-      const { updatedText: newText, stats: challengeStats } = updateChallenge(challengeText, mediaEntries, completedMedia);
+      // Update challenge text
+      const newText = updateChallenge(challengeText, mediaEntries, completedMedia);
 
       // Update state
       setUpdatedText(newText);
-      setStats(challengeStats);
       setShowOutput(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unknown error occurred');
@@ -161,56 +156,10 @@ Start: YYYY-MM-DD Finish: YYYY-MM-DD`}
           <Card className='bg-card border-border shadow-lg'>
             <CardHeader className='border-b border-border/40 py-3'>
               <CardTitle>Updated Challenge</CardTitle>
-              {stats && (
-                <CardDescription>
-                  {stats.completionPercentage === 100
-                    ? 'Congratulations on completing your challenge!'
-                    : `${stats.completedCount} of ${stats.totalCount} entries completed`}
-                </CardDescription>
-              )}
+              <CardDescription>Copy the updated challenge text</CardDescription>
             </CardHeader>
             <CardContent className='pt-4'>
               <div className='space-y-4'>
-                {stats && (
-                  <div className='p-3 bg-background/50 rounded-md space-y-3 border border-border/40 shadow-sm'>
-                    <h3 className='text-lg font-medium text-primary flex items-center gap-2'>
-                      <TrophyIcon className='h-5 w-5' />
-                      Challenge Progress
-                    </h3>
-                    <Progress value={stats.completionPercentage} className='h-2 bg-muted' />
-                    <p className='text-sm'>
-                      <span className='font-medium'>{stats.completedCount}</span>/<span>{stats.totalCount}</span> entries
-                      completed (<span className='font-medium'>{stats.completionPercentage}%</span>)
-                    </p>
-
-                    {stats.finishDate && (
-                      <p className='text-sm flex items-center'>
-                        <CheckIcon className='h-4 w-4 text-success mr-2' />
-                        Challenge completed on: <span className='font-medium ml-1'>{stats.finishDate}</span>
-                      </p>
-                    )}
-
-                    {stats.remainingMedia.length > 0 && (
-                      <div className='space-y-2'>
-                        <p className='text-sm flex items-center'>
-                          <ListTodoIcon className='h-4 w-4 text-warning mr-2' />
-                          Remaining entries to complete:
-                        </p>
-                        <ul className='text-sm pl-6 space-y-1'>
-                          {stats.remainingMedia.slice(0, 5).map((media, index) => (
-                            <li key={index} className='text-muted-foreground'>
-                              • {media}
-                            </li>
-                          ))}
-                          {stats.remainingMedia.length > 5 && (
-                            <li className='text-muted-foreground'>• ... and {stats.remainingMedia.length - 5} more</li>
-                          )}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                )}
-
                 <div className='space-y-1'>
                   <label htmlFor='updated-challenge' className='text-sm font-medium text-foreground'>
                     Updated Challenge Text
@@ -219,7 +168,7 @@ Start: YYYY-MM-DD Finish: YYYY-MM-DD`}
                     id='updated-challenge'
                     value={updatedText}
                     readOnly
-                    className='min-h-[500px] bg-background/75 border-border focus:border-primary'
+                    className='min-h-[600px] bg-background/75 border-border focus:border-primary'
                   />
                 </div>
 

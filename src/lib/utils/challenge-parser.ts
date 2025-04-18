@@ -1,4 +1,4 @@
-import { AnimeEntry, MediaEntry, CompletedAnime, CompletedMedia, ChallengeStats } from '@/types';
+import { AnimeEntry, MediaEntry, CompletedAnime, CompletedMedia } from '@/types';
 
 // Constants
 const ANIME_URL_PATTERN = /https:\/\/anilist\.co\/anime\/(\d+)(?:[^\s)"']*)?/g;
@@ -138,11 +138,10 @@ export const updateChallenge = (
   challengeText: string,
   mediaEntries: MediaEntry[],
   completedMedia: Record<string, CompletedMedia>
-): { updatedText: string; stats: ChallengeStats } => {
+): string => {
   const lines = challengeText.split('\n');
   let allCompleted = true;
   let latestDate: string | null = null;
-  const remainingMedia: string[] = [];
 
   // Process all media entries
   for (const entry of mediaEntries) {
@@ -156,10 +155,9 @@ export const updateChallenge = (
       latestDate = entryFinishDate;
     }
 
-    // Track incomplete entries for stats
+    // Track if all entries are completed
     if (!entryCompleted) {
       allCompleted = false;
-      collectRemainingMedia(entry, lines, remainingMedia);
     }
 
     // Update the challenge text for this entry
@@ -174,36 +172,7 @@ export const updateChallenge = (
     updatedText = updatedText.replace(/Challenge Finish Date: YYYY-MM-DD/, `Challenge Finish Date: ${latestDate}`);
   }
 
-  // Calculate stats
-  const stats = calculateStats(mediaEntries, completedMedia, allCompleted, latestDate, remainingMedia);
-
-  return { updatedText, stats };
-};
-
-/**
- * Calculate completion stats for the challenge
- */
-const calculateStats = (
-  mediaEntries: MediaEntry[],
-  completedMedia: Record<string, CompletedMedia>,
-  allCompleted: boolean,
-  latestDate: string | null,
-  remainingMedia: string[]
-): ChallengeStats => {
-  const completedCount = mediaEntries.filter(
-    entry => entry.completed || !!entry.finishDate || !!completedMedia[`${entry.mediaType}-${entry.mediaId}`]
-  ).length;
-
-  const totalCount = mediaEntries.length;
-  const completionPercentage = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
-
-  return {
-    completedCount,
-    totalCount,
-    completionPercentage,
-    finishDate: allCompleted ? latestDate : null,
-    remainingMedia,
-  };
+  return updatedText;
 };
 
 /**
@@ -239,27 +208,6 @@ const processEntryCompletion = (
   }
 
   return { entryCompleted, entryStartDate, entryFinishDate };
-};
-
-/**
- * Collect titles of remaining media for stats
- */
-const collectRemainingMedia = (entry: MediaEntry, lines: string[], remainingMedia: string[]): void => {
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].includes(entry.url)) {
-      const prevLine = lines[Math.max(0, i - 1)];
-      if (prevLine.includes(entry.entryNum)) {
-        // eslint-disable-next-line no-misleading-character-class
-        const titleMatch = prevLine.match(/[❌⚜️]\s+(.*)/);
-        if (titleMatch) {
-          remainingMedia.push(titleMatch[1]);
-        } else {
-          remainingMedia.push(`Entry ${entry.entryNum}`);
-        }
-      }
-      break;
-    }
-  }
 };
 
 /**
@@ -395,7 +343,7 @@ export const updateAnimeChallenge = (
   challengeText: string,
   animeEntries: AnimeEntry[],
   completedAnime: Record<string, CompletedAnime>
-): { updatedText: string; stats: ChallengeStats } => {
+): string => {
   // Convert legacy types to new types
   const mediaEntries: MediaEntry[] = animeEntries.map(entry => ({
     entryNum: entry.entryNum,

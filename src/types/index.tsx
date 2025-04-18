@@ -23,11 +23,3 @@ export interface CompletedMedia {
 
 // Legacy type maintained for backward compatibility
 export type CompletedAnime = Omit<CompletedMedia, 'mediaType'>;
-
-export interface ChallengeStats {
-  completedCount: number;
-  totalCount: number;
-  completionPercentage: number;
-  finishDate: string | null;
-  remainingMedia: string[];
-}
