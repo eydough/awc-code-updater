@@ -1,26 +1,30 @@
 import { AnimeEntry, MediaEntry, CompletedAnime, CompletedMedia, ChallengeStats } from '@/types';
 
-// Parse challenge text to extract media entries (anime and manga)
+// Constants
+const ANIME_URL_PATTERN = /https:\/\/anilist\.co\/anime\/(\d+)(?:[^\s)"']*)?/g;
+const MANGA_URL_PATTERN = /https:\/\/anilist\.co\/manga\/(\d+)(?:[^\s)"']*)?/g;
+const ENTRY_PATTERN = /^([A-Z]\d+[.)]\)?|[A-Z]\d[.)]|[\d]+[.)]).*$/i;
+const DATE_PATTERN = /Start: (\d{4}-\d{2}-\d{2}|YYYY-MM-DD) Finish: (\d{4}-\d{2}-\d{2}|YYYY-MM-DD)/;
+const COMPLETED_ICON = '⚜️';
+const NOT_COMPLETED_ICON = '❌';
+
+/**
+ * Parse challenge text to extract media entries (anime and manga)
+ */
 export const parseChallenge = (challengeText: string): MediaEntry[] => {
   const mediaEntries: MediaEntry[] = [];
-  // Support multiple formats for URLs:
-  // 1. [Title](https://anilist.co/anime/12345/) or [Title](https://anilist.co/manga/12345/)
-  // 2. Direct URL: https://anilist.co/anime/12345/ or https://anilist.co/manga/12345/
-  // 3. Plain URLs on their own line
-  // 4. URLs that might not end with a slash
-  const animeUrlPattern = /https:\/\/anilist\.co\/anime\/(\d+)(?:[^\s)"']*)?/g;
-  const mangaUrlPattern = /https:\/\/anilist\.co\/manga\/(\d+)(?:[^\s)"']*)?/g;
   const lines = challengeText.split('\n');
 
   // Process both anime and manga URLs
-  processMediaUrls(challengeText, lines, animeUrlPattern, 'anime', mediaEntries);
-  processMediaUrls(challengeText, lines, mangaUrlPattern, 'manga', mediaEntries);
+  processMediaUrls(challengeText, lines, ANIME_URL_PATTERN, 'anime', mediaEntries);
+  processMediaUrls(challengeText, lines, MANGA_URL_PATTERN, 'manga', mediaEntries);
 
-  console.log(`Found ${mediaEntries.length} media entries in total`);
   return mediaEntries;
 };
 
-// Helper function to process media URLs (anime or manga)
+/**
+ * Helper function to process media URLs (anime or manga)
+ */
 const processMediaUrls = (
   challengeText: string,
   lines: string[],
@@ -28,15 +32,7 @@ const processMediaUrls = (
   mediaType: 'anime' | 'manga',
   mediaEntries: MediaEntry[]
 ) => {
-  // Log all found URLs
-  const allUrls = [];
-  let urlMatch;
-  while ((urlMatch = urlPattern.exec(challengeText)) !== null) {
-    allUrls.push(urlMatch[0]);
-  }
-  console.log(`Found ${allUrls.length} AniList ${mediaType} URLs:`, allUrls);
-
-  // Reset the lastIndex to start from the beginning again
+  // Reset the lastIndex to start from the beginning
   urlPattern.lastIndex = 0;
 
   let match;
@@ -45,80 +41,81 @@ const processMediaUrls = (
     const mediaId = match[1]; // Just the numeric ID
     const position = match.index;
 
-    console.log(`Processing ${mediaType} URL: ${url} (ID: ${mediaId})`);
+    const lineIndex = findLineContainingUrl(lines, url);
 
-    // Find the entry number in previous lines
-    let entryNum = null;
-    let entryCompleted = false;
-    let lineIndex = -1;
+    if (lineIndex <= 0) continue;
 
-    // Find which line contains this URL
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i].includes(url)) {
-        lineIndex = i;
-        console.log(`Found URL on line ${i}: ${lines[i]}`);
-        break;
-      }
-    }
+    const { entryNum, completed } = findEntryInfo(lines, lineIndex);
+    const { startDate, finishDate } = findDateInfo(lines, lineIndex);
 
-    if (lineIndex > 0) {
-      // Look for the entry number in previous lines
-      for (let i = lineIndex - 1; i >= Math.max(0, lineIndex - 5); i--) {
-        const line = lines[i].trim();
-        // Support formats like grid-based ("A1)", "B2)") and numeric ("01)", "01.", "1)" or "1.")
-        const entryMatch = line.match(/^([A-Z]\d+[.)]\)?|[A-Z]\d[.)]|[\d]+[.)]).*$/i);
-        if (entryMatch) {
-          entryNum = entryMatch[1];
-          // Check if entry is completed
-          entryCompleted = line.includes('⚜️');
-          break;
-        }
-      }
-
-      // Look for dates in the next lines (check up to 3 lines after URL)
-      let startDate = null;
-      let finishDate = null;
-
-      for (let i = lineIndex + 1; i < Math.min(lines.length, lineIndex + 4); i++) {
-        const dateLine = lines[i];
-
-        // Check for "Start: YYYY-MM-DD Finish: YYYY-MM-DD" format
-        // Also support formats with additional content after dates
-        const dateMatch = dateLine.match(/Start: (\d{4}-\d{2}-\d{2}|YYYY-MM-DD) Finish: (\d{4}-\d{2}-\d{2}|YYYY-MM-DD)/);
-
-        if (dateMatch) {
-          console.log(`Found date line on line ${i}: ${dateLine}`);
-          startDate = dateMatch[1] !== 'YYYY-MM-DD' ? dateMatch[1] : null;
-          finishDate = dateMatch[2] !== 'YYYY-MM-DD' ? dateMatch[2] : null;
-
-          if (startDate) console.log(`Start date: ${startDate}`);
-          if (finishDate) console.log(`Finish date: ${finishDate}`);
-          break;
-        }
-      }
-
-      if (entryNum) {
-        console.log(`Adding ${mediaType} entry ${entryNum} with ID ${mediaId} to media entries`);
-        mediaEntries.push({
-          entryNum,
-          mediaId,
-          mediaType,
-          url,
-          position,
-          completed: entryCompleted,
-          startDate,
-          finishDate,
-        });
-      } else {
-        console.log(`Couldn't find entry identifier for URL: ${url}`);
-      }
-    } else {
-      console.log(`Couldn't find the line containing URL: ${url}`);
+    if (entryNum) {
+      mediaEntries.push({
+        entryNum,
+        mediaId,
+        mediaType,
+        url,
+        position,
+        completed,
+        startDate,
+        finishDate,
+      });
     }
   }
 };
 
-// Legacy function for backward compatibility
+/**
+ * Find the line containing the specified URL
+ */
+const findLineContainingUrl = (lines: string[], url: string): number => {
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].includes(url)) {
+      return i;
+    }
+  }
+  return -1;
+};
+
+/**
+ * Find entry information (entry number and completion status)
+ */
+const findEntryInfo = (lines: string[], lineIndex: number): { entryNum: string | null; completed: boolean } => {
+  for (let i = lineIndex - 1; i >= Math.max(0, lineIndex - 5); i--) {
+    const line = lines[i].trim();
+    const entryMatch = line.match(ENTRY_PATTERN);
+
+    if (entryMatch) {
+      return {
+        entryNum: entryMatch[1],
+        completed: line.includes(COMPLETED_ICON),
+      };
+    }
+  }
+
+  return { entryNum: null, completed: false };
+};
+
+/**
+ * Find date information (start and finish dates)
+ */
+const findDateInfo = (lines: string[], lineIndex: number): { startDate: string | null; finishDate: string | null } => {
+  for (let i = lineIndex + 1; i < Math.min(lines.length, lineIndex + 4); i++) {
+    const dateLine = lines[i];
+    const dateMatch = dateLine.match(DATE_PATTERN);
+
+    if (dateMatch) {
+      return {
+        startDate: dateMatch[1] !== 'YYYY-MM-DD' ? dateMatch[1] : null,
+        finishDate: dateMatch[2] !== 'YYYY-MM-DD' ? dateMatch[2] : null,
+      };
+    }
+  }
+
+  return { startDate: null, finishDate: null };
+};
+
+/**
+ * Legacy function for backward compatibility
+ */
 export const parseAnimeChallenge = (challengeText: string): AnimeEntry[] => {
   const mediaEntries = parseChallenge(challengeText);
   return mediaEntries
@@ -134,171 +131,65 @@ export const parseAnimeChallenge = (challengeText: string): AnimeEntry[] => {
     }));
 };
 
-// Update challenge text with completion status and dates
+/**
+ * Update challenge text with completion status and dates
+ */
 export const updateChallenge = (
   challengeText: string,
   mediaEntries: MediaEntry[],
   completedMedia: Record<string, CompletedMedia>
 ): { updatedText: string; stats: ChallengeStats } => {
-  let updatedText = challengeText;
-  const lines = updatedText.split('\n');
+  const lines = challengeText.split('\n');
   let allCompleted = true;
   let latestDate: string | null = null;
   const remainingMedia: string[] = [];
 
-  // Process all media entries - each entry is processed independently
-  // even if multiple entries reference the same media ID
+  // Process all media entries
   for (const entry of mediaEntries) {
-    const mediaId = entry.mediaId;
-    const mediaType = entry.mediaType;
-    let entryCompleted = entry.completed;
-    let entryStartDate = entry.startDate;
-    let entryFinishDate = entry.finishDate;
-
-    // Create a composite key for the media type and ID
+    const { mediaId, mediaType } = entry;
     const mediaKey = `${mediaType}-${mediaId}`;
 
-    // Check if this media is in the user's completed list
-    if (completedMedia[mediaKey]) {
-      const mediaData = completedMedia[mediaKey];
-      entryCompleted = true;
+    const { entryCompleted, entryStartDate, entryFinishDate } = processEntryCompletion(entry, completedMedia[mediaKey]);
 
-      // Use dates from AniList if available
-      if (mediaData.startDate) {
-        entryStartDate = mediaData.startDate;
-      }
-
-      if (mediaData.finishDate) {
-        entryFinishDate = mediaData.finishDate;
-
-        // Track latest finish date for overall challenge
-        if (!latestDate || entryFinishDate > latestDate) {
-          latestDate = entryFinishDate;
-        }
-      }
-    } else {
-      entryCompleted = !!entry.finishDate; // Consider entry completed if it has a finish date
-
-      if (!entryCompleted) {
-        allCompleted = false;
-
-        // Try to find media title in challenge text
-        for (let i = 0; i < lines.length; i++) {
-          if (lines[i].includes(entry.url)) {
-            const prevLine = lines[Math.max(0, i - 1)];
-            if (prevLine.includes(entry.entryNum)) {
-              // eslint-disable-next-line no-misleading-character-class
-              const titleMatch = prevLine.match(/[❌⚜️]\s+(.*)/);
-              if (titleMatch) {
-                remainingMedia.push(titleMatch[1]);
-              } else {
-                remainingMedia.push(`Entry ${entry.entryNum}`);
-              }
-            }
-            break;
-          }
-        }
-      }
+    // Update latestDate if this entry has a newer finish date
+    if (entryFinishDate && (!latestDate || entryFinishDate > latestDate)) {
+      latestDate = entryFinishDate;
     }
 
-    // Find the entry in the challenge text
-    // This is where the fix happens - ensure we're looking for the specific URL occurrence
-    // that corresponds to this entry, using the position information
-    let entryLineIdx = null;
-    let dateLineIdx = null;
-
-    // Find the exact line where this specific URL instance occurs
-    let foundUrlCount = 0;
-    let targetUrlOccurrence = 0;
-
-    // Determine which occurrence of this URL we're looking for
-    // by counting occurrences up to the entry's position
-    const urlsUpToPosition = challengeText
-      .substring(0, entry.position)
-      .match(new RegExp(entry.url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'));
-    targetUrlOccurrence = urlsUpToPosition ? urlsUpToPosition.length : 0;
-
-    // Find the specific occurrence of this URL in the lines
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i].includes(entry.url)) {
-        if (foundUrlCount === targetUrlOccurrence) {
-          // This is the specific URL occurrence we're looking for
-          // Now look backward for the entry line
-          for (let j = i - 1; j >= Math.max(0, i - 5); j--) {
-            // Support grid-based identifiers like "A1)", "B2)", etc.
-            // Also support standard numeric identifiers
-            const entryPattern = /^([A-Z]\d+[.)]\)?|[A-Z]\d[.)]|[\d]+[.)])/i;
-            if (lines[j].trim().match(entryPattern)) {
-              entryLineIdx = j;
-              break;
-            }
-          }
-
-          // Look for date line in next 3 lines
-          for (let j = i + 1; j < Math.min(lines.length, i + 4); j++) {
-            if (lines[j].includes('Start:') && lines[j].includes('Finish:')) {
-              dateLineIdx = j;
-              break;
-            }
-          }
-          break;
-        }
-        foundUrlCount++;
-      }
+    // Track incomplete entries for stats
+    if (!entryCompleted) {
+      allCompleted = false;
+      collectRemainingMedia(entry, lines, remainingMedia);
     }
 
-    if (entryLineIdx !== null && dateLineIdx !== null) {
-      // Update completion status in entry line
-      const entryLine = lines[entryLineIdx];
-      const hasCompletedIcon = entryLine.includes('⚜️');
-      const hasNotCompletedIcon = entryLine.includes('❌');
-
-      if (entryCompleted && hasNotCompletedIcon) {
-        lines[entryLineIdx] = entryLine.replace('❌', '⚜️');
-      } else if (!entryCompleted && hasCompletedIcon) {
-        lines[entryLineIdx] = entryLine.replace('⚜️', '❌');
-      }
-
-      // Update date line
-      if (entryStartDate || entryFinishDate) {
-        const dateLine = lines[dateLineIdx];
-        const start = entryStartDate || 'YYYY-MM-DD';
-        const finish = entryFinishDate || 'YYYY-MM-DD';
-
-        // Split by "Finish: " to preserve any additional content after dates
-        const dateParts = dateLine.split('Finish: ');
-        if (dateParts.length > 1) {
-          // Capture everything after the date, not just the first two parts
-          const finishPart = dateParts[1];
-          const dateMatch = finishPart.match(/\d{4}-\d{2}-\d{2}/);
-          const dateEndPos =
-            finishPart.indexOf('YYYY-MM-DD') !== -1
-              ? finishPart.indexOf('YYYY-MM-DD') + 10
-              : dateMatch
-              ? finishPart.indexOf(dateMatch[0]) + 10
-              : 0;
-
-          const extraContent = dateEndPos > 0 ? finishPart.substring(dateEndPos) : finishPart.substring(10);
-
-          lines[dateLineIdx] = `Start: ${start} Finish: ${finish}${extraContent}`;
-        } else {
-          lines[dateLineIdx] = `Start: ${start} Finish: ${finish}`;
-        }
-      }
-    }
+    // Update the challenge text for this entry
+    updateEntryInChallengeText(entry, lines, challengeText, entryCompleted, entryStartDate, entryFinishDate);
   }
 
   // Reassemble the updated text
-  updatedText = lines.join('\n');
+  let updatedText = lines.join('\n');
 
   // Update challenge finish date if all entries are completed
   if (latestDate && allCompleted) {
-    const challengeDatePattern = /Challenge Finish Date: YYYY-MM-DD/;
-    const replacement = `Challenge Finish Date: ${latestDate}`;
-    updatedText = updatedText.replace(challengeDatePattern, replacement);
+    updatedText = updatedText.replace(/Challenge Finish Date: YYYY-MM-DD/, `Challenge Finish Date: ${latestDate}`);
   }
 
   // Calculate stats
+  const stats = calculateStats(mediaEntries, completedMedia, allCompleted, latestDate, remainingMedia);
+
+  return { updatedText, stats };
+};
+
+/**
+ * Calculate completion stats for the challenge
+ */
+const calculateStats = (
+  mediaEntries: MediaEntry[],
+  completedMedia: Record<string, CompletedMedia>,
+  allCompleted: boolean,
+  latestDate: string | null,
+  remainingMedia: string[]
+): ChallengeStats => {
   const completedCount = mediaEntries.filter(
     entry => entry.completed || !!entry.finishDate || !!completedMedia[`${entry.mediaType}-${entry.mediaId}`]
   ).length;
@@ -306,18 +197,200 @@ export const updateChallenge = (
   const totalCount = mediaEntries.length;
   const completionPercentage = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
-  const stats: ChallengeStats = {
+  return {
     completedCount,
     totalCount,
     completionPercentage,
     finishDate: allCompleted ? latestDate : null,
     remainingMedia,
   };
-
-  return { updatedText, stats };
 };
 
-// Legacy function for backward compatibility
+/**
+ * Process entry completion status and dates
+ */
+const processEntryCompletion = (
+  entry: MediaEntry,
+  mediaData: CompletedMedia | undefined
+): {
+  entryCompleted: boolean;
+  entryStartDate: string | null;
+  entryFinishDate: string | null;
+} => {
+  let entryCompleted = entry.completed;
+  let entryStartDate = entry.startDate;
+  let entryFinishDate = entry.finishDate;
+
+  // Check if this media is in the user's completed list
+  if (mediaData) {
+    entryCompleted = true;
+
+    // Use dates from AniList if available
+    if (mediaData.startDate) {
+      entryStartDate = mediaData.startDate;
+    }
+
+    if (mediaData.finishDate) {
+      entryFinishDate = mediaData.finishDate;
+    }
+  } else {
+    // Consider entry completed if it has a finish date
+    entryCompleted = !!entry.finishDate;
+  }
+
+  return { entryCompleted, entryStartDate, entryFinishDate };
+};
+
+/**
+ * Collect titles of remaining media for stats
+ */
+const collectRemainingMedia = (entry: MediaEntry, lines: string[], remainingMedia: string[]): void => {
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].includes(entry.url)) {
+      const prevLine = lines[Math.max(0, i - 1)];
+      if (prevLine.includes(entry.entryNum)) {
+        // eslint-disable-next-line no-misleading-character-class
+        const titleMatch = prevLine.match(/[❌⚜️]\s+(.*)/);
+        if (titleMatch) {
+          remainingMedia.push(titleMatch[1]);
+        } else {
+          remainingMedia.push(`Entry ${entry.entryNum}`);
+        }
+      }
+      break;
+    }
+  }
+};
+
+/**
+ * Update entry in challenge text
+ */
+const updateEntryInChallengeText = (
+  entry: MediaEntry,
+  lines: string[],
+  challengeText: string,
+  entryCompleted: boolean,
+  entryStartDate: string | null,
+  entryFinishDate: string | null
+): void => {
+  const { entryLineIdx, dateLineIdx } = findEntryAndDateLines(entry, lines, challengeText);
+
+  if (entryLineIdx === null || dateLineIdx === null) return;
+
+  // Update completion status in entry line
+  updateCompletionStatus(lines, entryLineIdx, entryCompleted);
+
+  // Update date line
+  if (entryStartDate || entryFinishDate) {
+    updateDateLine(lines, dateLineIdx, entryStartDate, entryFinishDate);
+  }
+};
+
+/**
+ * Find entry and date lines for a specific media entry
+ */
+const findEntryAndDateLines = (
+  entry: MediaEntry,
+  lines: string[],
+  challengeText: string
+): { entryLineIdx: number | null; dateLineIdx: number | null } => {
+  // Find the exact line where this specific URL instance occurs
+  let foundUrlCount = 0;
+
+  // Determine which occurrence of this URL we're looking for
+  const escapedUrl = entry.url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const urlsUpToPosition = challengeText.substring(0, entry.position).match(new RegExp(escapedUrl, 'g'));
+  const targetUrlOccurrence = urlsUpToPosition ? urlsUpToPosition.length : 0;
+
+  let entryLineIdx = null;
+  let dateLineIdx = null;
+
+  // Find the specific occurrence of this URL in the lines
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].includes(entry.url)) {
+      if (foundUrlCount === targetUrlOccurrence) {
+        // Look backward for the entry line
+        entryLineIdx = findEntryLine(lines, i);
+        // Look forward for the date line
+        dateLineIdx = findDateLine(lines, i);
+        break;
+      }
+      foundUrlCount++;
+    }
+  }
+
+  return { entryLineIdx, dateLineIdx };
+};
+
+/**
+ * Find the entry line by looking backward from URL line
+ */
+const findEntryLine = (lines: string[], urlLineIndex: number): number | null => {
+  for (let j = urlLineIndex - 1; j >= Math.max(0, urlLineIndex - 5); j--) {
+    if (lines[j].trim().match(ENTRY_PATTERN)) {
+      return j;
+    }
+  }
+  return null;
+};
+
+/**
+ * Find the date line by looking forward from URL line
+ */
+const findDateLine = (lines: string[], urlLineIndex: number): number | null => {
+  for (let j = urlLineIndex + 1; j < Math.min(lines.length, urlLineIndex + 4); j++) {
+    if (lines[j].includes('Start:') && lines[j].includes('Finish:')) {
+      return j;
+    }
+  }
+  return null;
+};
+
+/**
+ * Update the completion status of an entry
+ */
+const updateCompletionStatus = (lines: string[], entryLineIdx: number, entryCompleted: boolean): void => {
+  const entryLine = lines[entryLineIdx];
+  const hasCompletedIcon = entryLine.includes(COMPLETED_ICON);
+  const hasNotCompletedIcon = entryLine.includes(NOT_COMPLETED_ICON);
+
+  if (entryCompleted && hasNotCompletedIcon) {
+    lines[entryLineIdx] = entryLine.replace(NOT_COMPLETED_ICON, COMPLETED_ICON);
+  } else if (!entryCompleted && hasCompletedIcon) {
+    lines[entryLineIdx] = entryLine.replace(COMPLETED_ICON, NOT_COMPLETED_ICON);
+  }
+};
+
+/**
+ * Update the date line with start and finish dates
+ */
+const updateDateLine = (lines: string[], dateLineIdx: number, startDate: string | null, finishDate: string | null): void => {
+  const dateLine = lines[dateLineIdx];
+  const start = startDate || 'YYYY-MM-DD';
+  const finish = finishDate || 'YYYY-MM-DD';
+
+  // Split by "Finish: " to preserve any additional content after dates
+  const dateParts = dateLine.split('Finish: ');
+  if (dateParts.length > 1) {
+    const finishPart = dateParts[1];
+    const dateMatch = finishPart.match(/\d{4}-\d{2}-\d{2}/);
+    const dateEndPos =
+      finishPart.indexOf('YYYY-MM-DD') !== -1
+        ? finishPart.indexOf('YYYY-MM-DD') + 10
+        : dateMatch
+        ? finishPart.indexOf(dateMatch[0]) + 10
+        : 0;
+
+    const extraContent = dateEndPos > 0 ? finishPart.substring(dateEndPos) : finishPart.substring(10);
+    lines[dateLineIdx] = `Start: ${start} Finish: ${finish}${extraContent}`;
+  } else {
+    lines[dateLineIdx] = `Start: ${start} Finish: ${finish}`;
+  }
+};
+
+/**
+ * Legacy function for backward compatibility
+ */
 export const updateAnimeChallenge = (
   challengeText: string,
   animeEntries: AnimeEntry[],
